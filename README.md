@@ -66,11 +66,11 @@ uv tool install . --editable
 # 若有报错：error: Querying Python at `.../bin/python3` failed with exit status signal: 9 (SIGKILL)
 # 则执行： sudo codesign -s - -f /path/to/.../bin/python3
 
-# 使用脚本入口运行
-uv run add-sql-to-excel --file input.json
+# 使用脚本入口运行（--file 需提供正确的相对/绝对路径）
+uv run add-sql-to-excel --file ../create-table-output/20260318/input.json
 
 # 调试模式
-uv run add-sql-to-excel --file input.json --debug
+uv run add-sql-to-excel --file ../create-table-output/20260318/input.json --debug
 ```
 
 > 若提示 `add-sql-to-excel: command not found`，请优先使用 `uv run add-sql-to-excel`；或者确认你已经在当前环境中安装了该项目（如使用传统 conda/venv，可在对应环境下执行 `pip install -e .`）。
@@ -115,7 +115,9 @@ uv run python app/main.py --json '{...}'
 ### 通过 JSON 文件输入
 
 ```bash
-uv run add-sql-to-excel --file input.json
+# --file 接受相对路径或绝对路径
+# input.json 通常位于输出目录 create-table-output/YYYYMMDD/ 下
+uv run add-sql-to-excel --file ../create-table-output/20260318/input.json
 ```
 
 `input.json` 示例（含可选字段）：
@@ -137,7 +139,7 @@ uv run add-sql-to-excel --file input.json
 ### 指定 Excel 输出路径
 
 ```bash
-uv run add-sql-to-excel --file input.json --excel /path/to/output.xlsx
+uv run add-sql-to-excel --file ../create-table-output/20260318/input.json --excel /path/to/output.xlsx
 ```
 
 > 默认输出路径为同级目录 `create-table-output/YYYYMMDD/create_table_info.xlsx`（按日期归档，覆盖写入）。
@@ -145,7 +147,7 @@ uv run add-sql-to-excel --file input.json --excel /path/to/output.xlsx
 ### 开启调试日志
 
 ```bash
-uv run add-sql-to-excel --file input.json --debug
+uv run add-sql-to-excel --file ../create-table-output/20260318/input.json --debug
 ```
 
 日志同时输出到控制台和 `logs/add_sql_to_excel.log` 文件。
