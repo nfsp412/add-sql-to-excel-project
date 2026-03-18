@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from app.utils.sql_parser import parse_input_json, parse_table_comment, parse_table_name
+from app.utils.sql_parser import detect_sharding, parse_input_json, parse_table_comment, parse_table_name
 
 SAMPLE_SQL = (
     "CREATE TABLE `ai_media_task` (\n"
@@ -81,6 +81,30 @@ class TestParseTableComment(unittest.TestCase):
             ") ENGINE=InnoDB"
         )
         self.assertIsNone(parse_table_comment(sql))
+
+
+class TestDetectSharding(unittest.TestCase):
+    def test_ends_with_single_digit(self):
+        self.assertEqual(detect_sharding("order_0"), "是")
+
+    def test_ends_with_multiple_digits(self):
+        self.assertEqual(detect_sharding("order_00"), "是")
+        self.assertEqual(detect_sharding("user_info_128"), "是")
+
+    def test_ends_with_letters(self):
+        self.assertEqual(detect_sharding("order_abc"), "否")
+
+    def test_no_underscore_suffix(self):
+        self.assertEqual(detect_sharding("order"), "否")
+
+    def test_ends_with_underscore_only(self):
+        self.assertEqual(detect_sharding("order_"), "否")
+
+    def test_normal_table_name(self):
+        self.assertEqual(detect_sharding("ai_media_task"), "否")
+
+    def test_digit_in_middle_not_at_end(self):
+        self.assertEqual(detect_sharding("t2_info"), "否")
 
 
 class TestParseInputJson(unittest.TestCase):
@@ -277,6 +301,71 @@ class TestParseInputJson(unittest.TestCase):
         result = parse_input_json(json.dumps(data))
         self.assertIsNotNone(result)
         self.assertIsNone(result.table_comment)
+
+    def test_is_sharding_from_json_yes(self):
+        data = {
+            "mysql_sql": SAMPLE_SQL,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "is_sharding": "是",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertEqual(result.is_sharding, "是")
+
+    def test_is_sharding_from_json_no(self):
+        data = {
+            "mysql_sql": SAMPLE_SQL,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "is_sharding": "否",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertEqual(result.is_sharding, "否")
+
+    def test_is_sharding_json_no_overrides_sql_detection(self):
+        sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
+        data = {
+            "mysql_sql": sharding_sql,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "is_sharding": "否",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertEqual(result.is_sharding, "否")
+
+    def test_is_sharding_auto_detect_yes(self):
+        sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
+        data = {
+            "mysql_sql": sharding_sql,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertEqual(result.is_sharding, "是")
+
+    def test_is_sharding_auto_detect_no(self):
+        result = parse_input_json(SAMPLE_JSON)
+        self.assertEqual(result.is_sharding, "否")
+
+    def test_is_sharding_invalid_value(self):
+        data = {
+            "mysql_sql": SAMPLE_SQL,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "is_sharding": "maybe",
+        }
+        self.assertIsNone(parse_input_json(json.dumps(data)))
+
+    def test_is_sharding_empty_string_falls_back_to_detection(self):
+        sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
+        data = {
+            "mysql_sql": sharding_sql,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "is_sharding": "",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertEqual(result.is_sharding, "是")
 
 
 class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):

@@ -5,7 +5,7 @@
 ## 功能说明
 
 - 接收包含 `mysql_sql`、`day_or_hour`、`product_line` 三个必需字段的 JSON 输入
-- 支持 5 个可选字段：`dw_layer`、`table_format`、`target_table_format`、`operate_type`、`table_comment`
+- 支持 6 个可选字段：`dw_layer`、`table_format`、`target_table_format`、`operate_type`、`table_comment`、`is_sharding`
 - 从 `mysql_sql` 中解析 MySQL 表名
 - 将解析结果写入 Excel 的 `tables` 和 `fields` 两个 Sheet
 - Excel 输出到按日期归档的目录（`create-table-output/YYYYMMDD/create_table_info.xlsx`）
@@ -25,6 +25,7 @@
 | tables | 建表格式   | `table_format`（可选）       | orc, rcfile, txt          |
 | tables | 目标表类型 | `target_table_format`（可选）| hive, clickhouse          |
 | tables | 操作类型   | `operate_type`（可选）       | 新建表, 修改表             |
+| tables | 是否分库分表 | `is_sharding`（可选，回退按表名 `_数字` 结尾检测） | 是, 否 |
 | tables | 其他列     | 置空                         | -                         |
 | fields | 表名       | 从 `mysql_sql` 解析          | -                         |
 | fields | 操作类型   | `operate_type`（可选，与 tables 一致） | 新建表, 修改表 |
@@ -132,11 +133,12 @@ uv run add-sql-to-excel --file ../create-table-output/20260318/input.json
   "table_format": "orc",
   "target_table_format": "hive",
   "operate_type": "新建表",
-  "table_comment": "AI媒体任务表"
+  "table_comment": "AI媒体任务表",
+  "is_sharding": "否"
 }
 ```
 
-可选字段均可省略；枚举类可选字段若提供则必须在允许值范围内，否则记录 WARNING 并跳过。`table_comment` 为自由文本，若未提供则自动从 `mysql_sql` 的表级 `COMMENT` 中解析；若两者同时存在，以 JSON 字段值为准。
+可选字段均可省略；枚举类可选字段若提供则必须在允许值范围内，否则记录 WARNING 并跳过。`table_comment` 为自由文本，若未提供则自动从 `mysql_sql` 的表级 `COMMENT` 中解析；若两者同时存在，以 JSON 字段值为准。`is_sharding` 若未提供则根据表名是否以 `_数字` 结尾自动判断（如 `order_0`）；若 JSON 显式传入则以 JSON 值为准。
 
 ### 指定 Excel 输出路径
 
@@ -164,11 +166,13 @@ uv run python -m unittest discover -v tests
 
 - SQL 表名解析（正常 / 无反引号 / 大小写不敏感 / 解析失败 / 空字符串）
 - SQL 表注释解析（单引号 / 双引号 / 有无等号 / 大小写不敏感 / 多行 SQL / 无表注释 / 无闭合括号 / 不误取列注释）
+- 分库分表检测（`_0` / `_00` / `_128` / `_abc` / 无后缀 / 仅下划线 / 中间数字）
 - JSON 解析（有效输入 / 缺少各必需字段 / JSON 格式错误 / 字段值为空 / 可选字段枚举校验）
 - table_comment（JSON 字段优先 / 回退 SQL 解析 / 空字符串回退 / SQL 无注释时为 None）
+- is_sharding（JSON 显式是 / 否覆盖检测 / 自动检测是 / 否 / 非法值跳过 / 空字符串回退）
 - SQL 双引号自动修复（`DEFAULT ""` / `COMMENT "xxx"` / 多列多处双引号 / 含可选字段 / 已正确转义不改动 / 多行 SQL / 修复后表名解析 / 无法修复返回 None）
-- Excel 写入（新建文件 / 正确列头 / 覆盖写入 / SQL 原文保留 / 解析失败跳过 / 可选字段写入 / 操作类型两页一致性 / 自动创建父目录 / table_comment 写入与置空）
-- 主流程（`--json` 参数 / `--file` 参数 / 输入解析失败退出 / JSON 文件不存在退出 / `--file` 含双引号 SQL 端到端写入 / table_comment 端到端）
+- Excel 写入（新建文件 / 正确列头 / 覆盖写入 / SQL 原文保留 / 解析失败跳过 / 可选字段写入 / 操作类型两页一致性 / 自动创建父目录 / table_comment 写入与置空 / is_sharding 写入）
+- 主流程（`--json` 参数 / `--file` 参数 / 输入解析失败退出 / JSON 文件不存在退出 / `--file` 含双引号 SQL 端到端写入 / table_comment 端到端 / is_sharding 端到端）
 
 ## 项目结构
 
@@ -188,7 +192,7 @@ add-sql-to-excel-project/
 │   └── utils/
 │       ├── __init__.py
 │       ├── logger.py             # 统一日志（控制台 + 文件双输出）
-│       ├── sql_parser.py         # SQL 表名/表注释解析 & JSON 输入解析
+│       ├── sql_parser.py         # SQL 表名/表注释/分库分表解析 & JSON 输入解析
 │       └── excel_writer.py       # Excel 覆盖写入逻辑
 ├── logs/                         # 日志输出目录
 └── tests/

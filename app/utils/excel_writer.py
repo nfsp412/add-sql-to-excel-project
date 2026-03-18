@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 TABLES_HEADERS = [
     "表名", "产品线", "入仓方式", "表注释信息",
     "数仓分层", "建表格式", "目标表类型", "操作类型", "hive表名",
+    "是否分库分表",
 ]
 
 FIELDS_HEADERS = [
@@ -54,6 +55,7 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
         data.target_table_format,
         data.operate_type,
         None,
+        data.is_sharding,
     ])
 
     fields_ws: Worksheet = wb["fields"]

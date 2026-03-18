@@ -12,12 +12,13 @@ DW_LAYER_VALUES = frozenset(("ods", "mds", "sds"))
 TABLE_FORMAT_VALUES = frozenset(("orc", "rcfile", "txt"))
 TARGET_TABLE_FORMAT_VALUES = frozenset(("hive", "clickhouse"))
 OPERATE_TYPE_VALUES = frozenset(("新建表", "修改表"))
+IS_SHARDING_VALUES = frozenset(("是", "否"))
 
 
 _ALL_KEYS = (
     "mysql_sql", "day_or_hour", "product_line",
     "dw_layer", "table_format", "target_table_format", "operate_type",
-    "table_comment",
+    "table_comment", "is_sharding",
 )
 
 
@@ -78,6 +79,11 @@ def parse_table_comment(sql: str) -> str | None:
     return None
 
 
+def detect_sharding(table_name: str) -> str:
+    """检测表名是否以 _数字 结尾，判断是否为分库分表。"""
+    return "是" if re.search(r"_\d+$", table_name) else "否"
+
+
 def parse_table_name(sql: str) -> str | None:
     """从 MySQL DDL 中提取表名，失败时返回 None。"""
     match = re.search(r"CREATE\s+TABLE\s+`?(\w+)`?", sql, re.IGNORECASE)
@@ -108,6 +114,7 @@ def parse_input_json(json_str: str) -> InputData | None:
     target_table_format = data.get("target_table_format") or None
     operate_type = data.get("operate_type") or None
     table_comment = data.get("table_comment") or None
+    is_sharding = data.get("is_sharding") or None
 
     if not _validate_optional_field(dw_layer, DW_LAYER_VALUES, "dw_layer"):
         return None
@@ -117,9 +124,15 @@ def parse_input_json(json_str: str) -> InputData | None:
         return None
     if not _validate_optional_field(operate_type, OPERATE_TYPE_VALUES, "operate_type"):
         return None
+    if not _validate_optional_field(is_sharding, IS_SHARDING_VALUES, "is_sharding"):
+        return None
 
     if not table_comment:
         table_comment = parse_table_comment(data["mysql_sql"])
+
+    if not is_sharding:
+        table_name = parse_table_name(data["mysql_sql"])
+        is_sharding = detect_sharding(table_name) if table_name else "否"
 
     return InputData(
         mysql_sql=data["mysql_sql"],
@@ -130,4 +143,5 @@ def parse_input_json(json_str: str) -> InputData | None:
         target_table_format=target_table_format,
         operate_type=operate_type,
         table_comment=table_comment,
+        is_sharding=is_sharding,
     )

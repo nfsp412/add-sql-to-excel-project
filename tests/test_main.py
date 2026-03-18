@@ -220,6 +220,64 @@ class TestMainTableComment(unittest.TestCase):
         self.assertEqual(row[3], "覆盖SQL注释")
 
 
+class TestMainIsSharding(unittest.TestCase):
+    """is_sharding 功能的端到端集成测试。"""
+
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.excel_path = self.tmp_dir / "output.xlsx"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_is_sharding_auto_detect_yes(self):
+        sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
+        data = {"mysql_sql": sharding_sql, "day_or_hour": "天表", "product_line": "sfst"}
+        with patch(
+            "sys.argv",
+            ["prog", "--json", json.dumps(data, ensure_ascii=False),
+             "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[9], "是")
+
+    def test_is_sharding_json_no_overrides_detection(self):
+        sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
+        data = {
+            "mysql_sql": sharding_sql,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "is_sharding": "否",
+        }
+        with patch(
+            "sys.argv",
+            ["prog", "--json", json.dumps(data, ensure_ascii=False),
+             "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[9], "否")
+
+    def test_is_sharding_default_no(self):
+        with patch(
+            "sys.argv",
+            ["prog", "--json", SAMPLE_JSON_STR, "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[9], "否")
+
+
 class TestMainFileWithDoubleQuotes(unittest.TestCase):
     """通过 --file 传入含未转义双引号 SQL 的 JSON 文件，验证端到端正常。"""
 

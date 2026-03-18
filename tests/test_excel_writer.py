@@ -193,6 +193,24 @@ class TestWriteRow(unittest.TestCase):
         tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
         self.assertIsNone(tables_row[3])
 
+    def test_is_sharding_yes_written(self):
+        data = InputData(
+            mysql_sql=SAMPLE_SQL,
+            day_or_hour="天表",
+            product_line="sfst",
+            is_sharding="是",
+        )
+        write_row(self.excel_path, data)
+        wb = load_workbook(self.excel_path)
+        tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(tables_row[9], "是")
+
+    def test_is_sharding_default_no(self):
+        write_row(self.excel_path, SAMPLE_DATA)
+        wb = load_workbook(self.excel_path)
+        tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(tables_row[9], "否")
+
 
 if __name__ == "__main__":
     unittest.main()
