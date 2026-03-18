@@ -1,16 +1,18 @@
 """日志工具模块"""
 import logging
-import os
 from pathlib import Path
 
-from app.config.settings import LOG_DIR, LOG_DATE_FORMAT, LOG_FORMAT
+from app.config.settings import LOG_DATE_FORMAT, LOG_DIR, LOG_FORMAT
 
 
-def setup_logging(debug: bool = False) -> None:
+def setup_logging(debug: bool = False, log_dir: str | Path | None = None) -> None:
     """
     配置统一的日志格式，支持控制台 + 文件双输出。
+    当 log_dir 有值时，日志文件写入 log_dir/add_sql_to_excel.log；否则使用项目内 LOG_DIR。
     """
-    Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
+    file_log_dir = Path(log_dir) if log_dir else Path(LOG_DIR)
+    file_log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = file_log_dir / "add_sql_to_excel.log"
 
     log_level = logging.DEBUG if debug else logging.INFO
 
@@ -20,9 +22,6 @@ def setup_logging(debug: bool = False) -> None:
         datefmt=LOG_DATE_FORMAT,
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler(
-                os.path.join(LOG_DIR, "add_sql_to_excel.log"),
-                encoding="utf-8",
-            ),
+            logging.FileHandler(str(log_file), encoding="utf-8"),
         ],
     )

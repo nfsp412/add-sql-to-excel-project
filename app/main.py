@@ -52,7 +52,7 @@ def main() -> None:
     parser = build_parser(default_excel)
     args = parser.parse_args()
 
-    setup_logging(debug=args.debug)
+    setup_logging(debug=args.debug, log_dir=output_dir)
     logger.info("add_sql_to_excel 脚本启动")
 
     if args.file:
