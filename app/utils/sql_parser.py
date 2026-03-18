@@ -98,17 +98,8 @@ def parse_table_name(sql: str) -> str | None:
     return None
 
 
-def parse_input_json(json_str: str) -> InputData | None:
-    """解析 JSON 字符串为 InputData，缺少必需字段时记录日志并返回 None。"""
-    try:
-        data = json.loads(json_str)
-    except json.JSONDecodeError:
-        data = _try_repair_json(json_str)
-        if data is None:
-            logger.warning("JSON 解析失败且自动修复未成功，请检查输入格式")
-            return None
-        logger.info("已自动修复 JSON（SQL 中的双引号已替换为单引号）")
-
+def parse_input_dict(data: dict) -> InputData | None:
+    """解析 dict 为 InputData，缺少必需字段时记录日志并返回 None。"""
     missing = [f for f in _REQUIRED_FIELDS if not data.get(f)]
     if missing:
         logger.warning("JSON 缺少必需字段: %s，跳过本次处理", missing)
@@ -150,3 +141,19 @@ def parse_input_json(json_str: str) -> InputData | None:
         table_comment=table_comment,
         is_sharding=is_sharding,
     )
+
+
+def parse_input_json(json_str: str) -> InputData | None:
+    """解析 JSON 字符串为 InputData，缺少必需字段时记录日志并返回 None。"""
+    try:
+        data = json.loads(json_str)
+    except json.JSONDecodeError:
+        data = _try_repair_json(json_str)
+        if data is None:
+            logger.warning("JSON 解析失败且自动修复未成功，请检查输入格式")
+            return None
+        logger.info("已自动修复 JSON（SQL 中的双引号已替换为单引号）")
+
+    if not isinstance(data, dict):
+        return None
+    return parse_input_dict(data)

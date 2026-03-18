@@ -140,6 +140,15 @@ uv run add-sql-to-excel --file ../create-table-output/20260318/input.json
 
 可选字段均可省略；枚举类可选字段若提供则必须在允许值范围内，否则记录 WARNING 并跳过。`table_comment` 为自由文本，若未提供则自动从 `mysql_sql` 的表级 `COMMENT` 中解析；若两者同时存在，以 JSON 字段值为准。`is_sharding` 若未提供则根据表名是否以 `_数字` 结尾自动判断（如 `order_0`）；若 JSON 显式传入则以 JSON 值为准。
 
+**支持 JSON 数组格式**：输入可为数组 `[{...}, {...}]`，每项为一张表配置，将批量写入同一 Excel。单对象 `{...}` 仍兼容，内部按单元素数组处理。
+
+```json
+[
+  {"mysql_sql": "CREATE TABLE `table_a` (id int);", "day_or_hour": "天表", "product_line": "sfst"},
+  {"mysql_sql": "CREATE TABLE `table_b` (id int);", "day_or_hour": "小时表", "product_line": "wax"}
+]
+```
+
 ### 指定 Excel 输出路径
 
 ```bash

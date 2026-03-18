@@ -32,23 +32,16 @@ def _create_workbook() -> Workbook:
     return wb
 
 
-def write_row(excel_path: str | Path, data: InputData) -> None:
-    """将 InputData 数据写入 Excel 的 tables 和 fields 两个 Sheet（覆盖模式）。"""
+def _row_from_data(data: InputData) -> tuple[list, list] | None:
+    """从 InputData 提取 tables 行和 fields 行，SQL 解析失败返回 None。"""
     table_name = parse_table_name(data.mysql_sql)
     if table_name is None:
         logger.warning("SQL 解析失败，跳过写入。")
-        return
+        return None
 
-    # 分库分表时去除表名末尾 _数字 后缀
     display_table_name = strip_sharding_suffix(table_name) if data.is_sharding == "是" else table_name
 
-    p = Path(excel_path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-
-    wb = _create_workbook()
-
-    tables_ws: Worksheet = wb["tables"]
-    tables_ws.append([
+    tables_row = [
         display_table_name,
         data.product_line,
         data.day_or_hour,
@@ -59,17 +52,55 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
         data.operate_type,
         None,
         data.is_sharding,
-    ])
-
-    fields_ws: Worksheet = wb["fields"]
-    fields_ws.append([
+    ]
+    fields_row = [
         display_table_name,
         None,
         None,
         None,
         data.operate_type,
         data.mysql_sql,
-    ])
+    ]
+    return (tables_row, fields_row)
+
+
+def write_row(excel_path: str | Path, data: InputData) -> None:
+    """将 InputData 数据写入 Excel 的 tables 和 fields 两个 Sheet（覆盖模式）。"""
+    rows = _row_from_data(data)
+    if rows is None:
+        return
+
+    p = Path(excel_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+    wb = _create_workbook()
+    tables_ws: Worksheet = wb["tables"]
+    fields_ws: Worksheet = wb["fields"]
+    tables_ws.append(rows[0])
+    fields_ws.append(rows[1])
 
     wb.save(p)
-    logger.info("已写入表 '%s' 到 %s", display_table_name, p)
+    logger.info("已写入表 '%s' 到 %s", rows[0][0], p)
+
+
+def write_rows(excel_path: str | Path, data_list: list[InputData]) -> None:
+    """将多条 InputData 批量写入 Excel 的 tables 和 fields 两个 Sheet。"""
+    if not data_list:
+        logger.warning("data_list 为空，不写入文件")
+        return
+
+    p = Path(excel_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+    wb = _create_workbook()
+    tables_ws: Worksheet = wb["tables"]
+    fields_ws: Worksheet = wb["fields"]
+
+    for data in data_list:
+        rows = _row_from_data(data)
+        if rows:
+            tables_ws.append(rows[0])
+            fields_ws.append(rows[1])
+            logger.info("已写入表 '%s' 到 %s", rows[0][0], p)
+
+    wb.save(p)

@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from app.utils.sql_parser import detect_sharding, parse_input_json, parse_table_comment, parse_table_name, strip_sharding_suffix
+from app.utils.sql_parser import detect_sharding, parse_input_dict, parse_input_json, parse_table_comment, parse_table_name, strip_sharding_suffix
 
 SAMPLE_SQL = (
     "CREATE TABLE `ai_media_task` (\n"
@@ -130,6 +130,16 @@ class TestParseInputJson(unittest.TestCase):
         self.assertEqual(result.day_or_hour, "天表")
         self.assertEqual(result.product_line, "sfst")
         self.assertEqual(result.mysql_sql, SAMPLE_SQL)
+
+    def test_parse_input_dict_same_as_json(self):
+        """parse_input_dict 与 parse_input_json 对同一 dict 应返回相同结果。"""
+        data = json.loads(SAMPLE_JSON)
+        result_json = parse_input_json(SAMPLE_JSON)
+        result_dict = parse_input_dict(data)
+        self.assertIsNotNone(result_dict)
+        self.assertEqual(result_dict.day_or_hour, result_json.day_or_hour)
+        self.assertEqual(result_dict.product_line, result_json.product_line)
+        self.assertEqual(result_dict.mysql_sql, result_json.mysql_sql)
 
     def test_missing_mysql_sql(self):
         data = {"day_or_hour": "天表", "product_line": "sfst"}

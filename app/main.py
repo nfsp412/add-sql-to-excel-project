@@ -1,13 +1,14 @@
 import argparse
+import json
 import logging
 import sys
 from datetime import datetime
 from pathlib import Path
 
 from app.config.settings import EXCEL_FILENAME, OUTPUT_BASE_DIR
-from app.utils.excel_writer import write_row
+from app.utils.excel_writer import write_rows
 from app.utils.logger import setup_logging
-from app.utils.sql_parser import parse_input_json
+from app.utils.sql_parser import _try_repair_json, parse_input_dict
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +64,37 @@ def main() -> None:
     else:
         json_str = args.json
 
-    data = parse_input_json(json_str)
-    if data is None:
-        logger.error("输入数据解析失败，程序退出。")
+    try:
+        parsed = json.loads(json_str)
+    except json.JSONDecodeError:
+        parsed = _try_repair_json(json_str)
+        if parsed is None:
+            logger.error("JSON 解析失败且自动修复未成功，程序退出。")
+            sys.exit(1)
+        logger.info("已自动修复 JSON（SQL 中的双引号已替换为单引号）")
+
+    if isinstance(parsed, dict):
+        items = [parsed]
+    elif isinstance(parsed, list):
+        items = parsed
+    else:
+        logger.error("输入格式错误，应为 JSON 对象或数组")
         sys.exit(1)
 
-    write_row(args.excel, data)
+    data_list: list = []
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            logger.warning("第 %d 项不是对象，跳过", i + 1)
+            continue
+        data = parse_input_dict(item)
+        if data:
+            data_list.append(data)
+
+    if not data_list:
+        logger.error("没有可写入的数据，程序退出。")
+        sys.exit(1)
+
+    write_rows(args.excel, data_list)
 
 
 if __name__ == "__main__":

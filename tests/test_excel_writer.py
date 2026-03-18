@@ -5,7 +5,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from app.utils.excel_writer import FIELDS_HEADERS, TABLES_HEADERS, write_row
+from app.utils.excel_writer import FIELDS_HEADERS, TABLES_HEADERS, write_row, write_rows
 from app.models import InputData
 
 SAMPLE_SQL = (
@@ -237,6 +237,26 @@ class TestWriteRow(unittest.TestCase):
         wb = load_workbook(self.excel_path)
         tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
         self.assertEqual(tables_row[9], "否")
+
+    def test_write_rows_multiple_tables(self):
+        """write_rows 应批量写入多张表到同一 Excel。"""
+        second_data = InputData(
+            mysql_sql="CREATE TABLE `other_table` (id int);",
+            day_or_hour="小时表",
+            product_line="wax",
+        )
+        write_rows(self.excel_path, [SAMPLE_DATA, second_data])
+
+        wb = load_workbook(self.excel_path)
+        tables_ws = wb["tables"]
+        fields_ws = wb["fields"]
+        self.assertEqual(tables_ws.max_row, 3)
+        self.assertEqual(fields_ws.max_row, 3)
+
+        row1 = list(tables_ws.iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        row2 = list(tables_ws.iter_rows(min_row=3, max_row=3, values_only=True))[0]
+        self.assertEqual(row1[0], "ai_media_task")
+        self.assertEqual(row2[0], "other_table")
 
 
 if __name__ == "__main__":

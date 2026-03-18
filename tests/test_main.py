@@ -109,6 +109,48 @@ class TestMainWithFile(unittest.TestCase):
             self.assertEqual(ctx.exception.code, 1)
 
 
+class TestMainWithArrayJson(unittest.TestCase):
+    """JSON 数组格式的端到端集成测试。"""
+
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.excel_path = self.tmp_dir / "output.xlsx"
+        self.json_file = self.tmp_dir / "input_array.json"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_array_json_writes_multiple_tables(self):
+        array_json = json.dumps(
+            [
+                SAMPLE_JSON_DICT,
+                {
+                    "mysql_sql": "CREATE TABLE `other_table` (id int);",
+                    "day_or_hour": "小时表",
+                    "product_line": "wax",
+                },
+            ],
+            ensure_ascii=False,
+        )
+        self.json_file.write_text(array_json, encoding="utf-8")
+
+        with patch(
+            "sys.argv",
+            ["prog", "--file", str(self.json_file), "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        self.assertTrue(self.excel_path.exists())
+        wb = load_workbook(self.excel_path)
+        tables_ws = wb["tables"]
+        self.assertEqual(tables_ws.max_row, 3)
+        row1 = list(tables_ws.iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        row2 = list(tables_ws.iter_rows(min_row=3, max_row=3, values_only=True))[0]
+        self.assertEqual(row1[0], "ai_media_task")
+        self.assertEqual(row2[0], "other_table")
+
+
 class TestMainParseFailure(unittest.TestCase):
     """输入数据解析失败时应以 exit code 1 退出。"""
 
