@@ -5,7 +5,7 @@ from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.models import InputData
-from app.utils.sql_parser import parse_table_name
+from app.utils.sql_parser import parse_table_name, strip_sharding_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,9 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
         logger.warning("SQL 解析失败，跳过写入。")
         return
 
+    # 分库分表时去除表名末尾 _数字 后缀
+    display_table_name = strip_sharding_suffix(table_name) if data.is_sharding == "是" else table_name
+
     p = Path(excel_path)
     p.parent.mkdir(parents=True, exist_ok=True)
 
@@ -46,7 +49,7 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
 
     tables_ws: Worksheet = wb["tables"]
     tables_ws.append([
-        table_name,
+        display_table_name,
         data.product_line,
         data.day_or_hour,
         data.table_comment,
@@ -60,7 +63,7 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
 
     fields_ws: Worksheet = wb["fields"]
     fields_ws.append([
-        table_name,
+        display_table_name,
         None,
         None,
         None,
@@ -69,4 +72,4 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
     ])
 
     wb.save(p)
-    logger.info("已写入表 '%s' 到 %s", table_name, p)
+    logger.info("已写入表 '%s' 到 %s", display_table_name, p)

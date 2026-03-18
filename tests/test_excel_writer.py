@@ -205,6 +205,33 @@ class TestWriteRow(unittest.TestCase):
         tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
         self.assertEqual(tables_row[9], "是")
 
+    def test_sharding_strips_table_name_suffix(self):
+        sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
+        data = InputData(
+            mysql_sql=sharding_sql,
+            day_or_hour="天表",
+            product_line="sfst",
+            is_sharding="是",
+        )
+        write_row(self.excel_path, data)
+        wb = load_workbook(self.excel_path)
+        tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        fields_row = list(wb["fields"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(tables_row[0], "order")
+        self.assertEqual(fields_row[0], "order")
+
+    def test_is_sharding_yes_no_suffix_unchanged(self):
+        data = InputData(
+            mysql_sql=SAMPLE_SQL,
+            day_or_hour="天表",
+            product_line="sfst",
+            is_sharding="是",
+        )
+        write_row(self.excel_path, data)
+        wb = load_workbook(self.excel_path)
+        tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(tables_row[0], "ai_media_task")
+
     def test_is_sharding_default_no(self):
         write_row(self.excel_path, SAMPLE_DATA)
         wb = load_workbook(self.excel_path)

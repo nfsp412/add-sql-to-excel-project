@@ -243,6 +243,7 @@ class TestMainIsSharding(unittest.TestCase):
 
         wb = load_workbook(self.excel_path)
         row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[0], "order")
         self.assertEqual(row[9], "是")
 
     def test_is_sharding_json_no_overrides_detection(self):
@@ -263,6 +264,7 @@ class TestMainIsSharding(unittest.TestCase):
 
         wb = load_workbook(self.excel_path)
         row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[0], "order_0")
         self.assertEqual(row[9], "否")
 
     def test_is_sharding_default_no(self):

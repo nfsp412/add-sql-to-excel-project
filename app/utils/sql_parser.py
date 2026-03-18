@@ -84,6 +84,11 @@ def detect_sharding(table_name: str) -> str:
     return "是" if re.search(r"_\d+$", table_name) else "否"
 
 
+def strip_sharding_suffix(table_name: str) -> str:
+    """当表名为分库分表时，去除末尾的 _数字 后缀。"""
+    return re.sub(r"_\d+$", "", table_name)
+
+
 def parse_table_name(sql: str) -> str | None:
     """从 MySQL DDL 中提取表名，失败时返回 None。"""
     match = re.search(r"CREATE\s+TABLE\s+`?(\w+)`?", sql, re.IGNORECASE)

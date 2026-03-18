@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from app.utils.sql_parser import detect_sharding, parse_input_json, parse_table_comment, parse_table_name
+from app.utils.sql_parser import detect_sharding, parse_input_json, parse_table_comment, parse_table_name, strip_sharding_suffix
 
 SAMPLE_SQL = (
     "CREATE TABLE `ai_media_task` (\n"
@@ -105,6 +105,22 @@ class TestDetectSharding(unittest.TestCase):
 
     def test_digit_in_middle_not_at_end(self):
         self.assertEqual(detect_sharding("t2_info"), "否")
+
+
+class TestStripShardingSuffix(unittest.TestCase):
+    def test_strips_single_digit(self):
+        self.assertEqual(strip_sharding_suffix("order_0"), "order")
+
+    def test_strips_multiple_digits(self):
+        self.assertEqual(strip_sharding_suffix("user_128"), "user")
+        self.assertEqual(strip_sharding_suffix("order_00"), "order")
+
+    def test_no_suffix_unchanged(self):
+        self.assertEqual(strip_sharding_suffix("foo"), "foo")
+        self.assertEqual(strip_sharding_suffix("ai_media_task"), "ai_media_task")
+
+    def test_underscore_letters_not_stripped(self):
+        self.assertEqual(strip_sharding_suffix("order_abc"), "order_abc")
 
 
 class TestParseInputJson(unittest.TestCase):
