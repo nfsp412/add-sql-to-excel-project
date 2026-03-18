@@ -187,5 +187,102 @@ class TestParseInputJson(unittest.TestCase):
             self.assertEqual(result.operate_type, val)
 
 
+class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
+    """SQL 中含未转义双引号时的自动修复测试。"""
+
+    def test_sql_with_default_empty_double_quotes(self):
+        raw = (
+            '{"mysql_sql": "CREATE TABLE `t` (`name` varchar(64) DEFAULT ""'
+            " COMMENT '名称') ENGINE=InnoDB\""
+            ', "day_or_hour": "天表", "product_line": "sfst"}'
+        )
+        result = parse_input_json(raw)
+        self.assertIsNotNone(result)
+        self.assertIn("DEFAULT ''", result.mysql_sql)
+        self.assertEqual(result.day_or_hour, "天表")
+
+    def test_sql_with_unescaped_double_quotes(self):
+        raw = (
+            '{"mysql_sql": "CREATE TABLE `t` ('
+            '`a` varchar(64) DEFAULT "" COMMENT "名称"'
+            ') ENGINE=InnoDB", "day_or_hour": "天表", "product_line": "sfst"}'
+        )
+        result = parse_input_json(raw)
+        self.assertIsNotNone(result)
+        self.assertIn("DEFAULT ''", result.mysql_sql)
+        self.assertIn("COMMENT '名称'", result.mysql_sql)
+
+    def test_sql_with_multiple_double_quoted_columns(self):
+        raw = (
+            '{"mysql_sql": "CREATE TABLE `t` ('
+            '`a` varchar DEFAULT "" COMMENT "字段A", '
+            '`b` varchar DEFAULT "hello" COMMENT "字段B"'
+            ') ENGINE=InnoDB", "day_or_hour": "天表", "product_line": "sfst"}'
+        )
+        result = parse_input_json(raw)
+        self.assertIsNotNone(result)
+        self.assertIn("DEFAULT ''", result.mysql_sql)
+        self.assertIn("DEFAULT 'hello'", result.mysql_sql)
+        self.assertIn("COMMENT '字段A'", result.mysql_sql)
+        self.assertIn("COMMENT '字段B'", result.mysql_sql)
+
+    def test_properly_escaped_quotes_use_normal_path(self):
+        sql = 'CREATE TABLE `t` (`a` varchar DEFAULT "" COMMENT "名称") ENGINE=InnoDB'
+        data = {"mysql_sql": sql, "day_or_hour": "天表", "product_line": "sfst"}
+        result = parse_input_json(json.dumps(data))
+        self.assertIsNotNone(result)
+        self.assertIn('DEFAULT ""', result.mysql_sql)
+        self.assertIn('COMMENT "名称"', result.mysql_sql)
+
+    def test_repair_with_optional_fields(self):
+        raw = (
+            '{"mysql_sql": "CREATE TABLE `t` (`a` int) COMMENT "表注释"", '
+            '"day_or_hour": "天表", "product_line": "sfst", '
+            '"dw_layer": "ods", "operate_type": "新建表"}'
+        )
+        result = parse_input_json(raw)
+        self.assertIsNotNone(result)
+        self.assertIn("COMMENT '表注释'", result.mysql_sql)
+        self.assertEqual(result.dw_layer, "ods")
+        self.assertEqual(result.operate_type, "新建表")
+
+    def test_multiline_sql_with_double_quotes(self):
+        raw = (
+            '{"mysql_sql": "CREATE TABLE `user_info` (\n'
+            '  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT "主键",\n'
+            '  `name` varchar(64) DEFAULT "" COMMENT "用户名"\n'
+            ') ENGINE=InnoDB COMMENT "用户表"", '
+            '"day_or_hour": "天表", "product_line": "sfst"}'
+        )
+        result = parse_input_json(raw)
+        self.assertIsNotNone(result)
+        self.assertIn("COMMENT '主键'", result.mysql_sql)
+        self.assertIn("DEFAULT ''", result.mysql_sql)
+        self.assertIn("COMMENT '用户名'", result.mysql_sql)
+        self.assertIn("COMMENT '用户表'", result.mysql_sql)
+        self.assertIn("\n", result.mysql_sql)
+
+    def test_repair_missing_mysql_sql_key_returns_none(self):
+        raw = '{"day_or_hour": "天表", "product_line": "sfst"}'
+        result = parse_input_json(raw)
+        self.assertIsNone(result)
+
+    def test_repaired_sql_can_parse_table_name(self):
+        raw = (
+            '{"mysql_sql": "CREATE TABLE `order_detail` ('
+            '`id` int COMMENT "主键"'
+            ') ENGINE=InnoDB COMMENT "订单明细"", '
+            '"day_or_hour": "天表", "product_line": "sfst"}'
+        )
+        result = parse_input_json(raw)
+        self.assertIsNotNone(result)
+        table_name = parse_table_name(result.mysql_sql)
+        self.assertEqual(table_name, "order_detail")
+
+    def test_irreparable_json_returns_none(self):
+        self.assertIsNone(parse_input_json("{totally broken"))
+        self.assertIsNone(parse_input_json("not json at all"))
+
+
 if __name__ == "__main__":
     unittest.main()

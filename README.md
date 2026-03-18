@@ -11,6 +11,7 @@
 - Excel 输出到按日期归档的目录（`create-table-output/YYYYMMDD/create_table_info.xlsx`）
 - 采用**覆盖写入**模式，重跑脚本不会产生重复数据
 - 缺少必需字段或 SQL 解析失败时，记录日志并跳过，不终止程序
+- SQL 中包含未转义的双引号时（如 `DEFAULT ""` 或 `COMMENT "xxx"`），自动将双引号替换为单引号后继续解析（MySQL 中两者等价）
 
 ### 字段映射
 
@@ -42,6 +43,55 @@ cd add-sql-to-excel-project
 
 # 安装依赖
 uv sync
+```
+
+说明：
+
+- 这会根据 `pyproject.toml` 和 `uv.lock` 创建/复用本地虚拟环境（默认在 `.venv/`），并安装所需依赖。
+- 如果尚未安装 `uv`，可参考官方安装文档（`https://docs.astral.sh/uv/`），或使用系统包管理器安装。
+
+### 安装为命令行工具使用
+
+项目提供命令行入口：`add-sql-to-excel=app.main:main`（定义在 `pyproject.toml` 的 `[project.scripts]` 中）。
+
+```bash
+cd add-sql-to-excel-project
+
+# 确保依赖已安装
+uv sync
+
+# 全局安装工具
+uv tool install . --editable
+
+# 若有报错：error: Querying Python at `.../bin/python3` failed with exit status signal: 9 (SIGKILL)
+# 则执行： sudo codesign -s - -f /path/to/.../bin/python3
+
+# 使用脚本入口运行
+uv run add-sql-to-excel --file input.json
+
+# 调试模式
+uv run add-sql-to-excel --file input.json --debug
+```
+
+> 若提示 `add-sql-to-excel: command not found`，请优先使用 `uv run add-sql-to-excel`；或者确认你已经在当前环境中安装了该项目（如使用传统 conda/venv，可在对应环境下执行 `pip install -e .`）。
+
+### 常用 uv 命令速查
+
+```bash
+# 安装依赖
+uv add <package>
+
+# 移除依赖
+uv remove <package>
+
+# 运行程序
+uv run <script.py>
+
+# 同步环境
+uv sync
+
+# 全局安装工具
+uv tool install <tool>
 ```
 
 ## 使用方法
@@ -110,8 +160,9 @@ uv run python -m unittest discover -v tests
 
 - SQL 表名解析（正常 / 无反引号 / 大小写不敏感 / 解析失败 / 空字符串）
 - JSON 解析（有效输入 / 缺少各必需字段 / JSON 格式错误 / 字段值为空 / 可选字段枚举校验）
+- SQL 双引号自动修复（`DEFAULT ""` / `COMMENT "xxx"` / 多列多处双引号 / 含可选字段 / 已正确转义不改动 / 多行 SQL / 修复后表名解析 / 无法修复返回 None）
 - Excel 写入（新建文件 / 正确列头 / 覆盖写入 / SQL 原文保留 / 解析失败跳过 / 可选字段写入 / 操作类型两页一致性 / 自动创建父目录）
-- 主流程（`--json` 参数 / `--file` 参数 / 输入解析失败退出 / JSON 文件不存在退出）
+- 主流程（`--json` 参数 / `--file` 参数 / 输入解析失败退出 / JSON 文件不存在退出 / `--file` 含双引号 SQL 端到端写入）
 
 ## 项目结构
 
@@ -145,7 +196,8 @@ add-sql-to-excel-project/
 
 | 场景                      | 行为                       |
 |---------------------------|----------------------------|
-| JSON 格式非法             | 记录 WARNING 日志，跳过     |
+| SQL 含未转义双引号        | 自动替换为单引号后继续解析，记录 INFO 日志 |
+| JSON 格式非法             | 尝试自动修复，失败则记录 WARNING 日志并跳过 |
 | JSON 缺少必需字段         | 记录 WARNING 日志，跳过     |
 | 可选字段值不在允许范围内  | 记录 WARNING 日志，跳过     |
 | SQL 中无法提取表名        | 记录 WARNING 日志，跳过     |

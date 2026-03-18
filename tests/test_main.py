@@ -169,5 +169,59 @@ class TestMainDateDirectory(unittest.TestCase):
         self.assertEqual(wb["tables"].max_row, 2)
 
 
+class TestMainFileWithDoubleQuotes(unittest.TestCase):
+    """通过 --file 传入含未转义双引号 SQL 的 JSON 文件，验证端到端正常。"""
+
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.excel_path = self.tmp_dir / "output.xlsx"
+        self.json_file = self.tmp_dir / "input.json"
+        broken_json = (
+            '{"mysql_sql": "CREATE TABLE `t` ('
+            '`a` varchar(64) DEFAULT "" COMMENT "名称"'
+            ') ENGINE=InnoDB COMMENT "测试表"", '
+            '"day_or_hour": "天表", "product_line": "sfst"}'
+        )
+        self.json_file.write_text(broken_json, encoding="utf-8")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_file_with_double_quotes_creates_excel(self):
+        with patch(
+            "sys.argv",
+            ["prog", "--file", str(self.json_file), "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        self.assertTrue(self.excel_path.exists())
+        wb = load_workbook(self.excel_path)
+        tables_ws = wb["tables"]
+        self.assertEqual(tables_ws.max_row, 2)
+        row = list(tables_ws.iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[0], "t")
+        self.assertEqual(row[1], "sfst")
+        self.assertEqual(row[2], "天表")
+
+    def test_fields_sheet_sql_has_single_quotes_after_repair(self):
+        with patch(
+            "sys.argv",
+            ["prog", "--file", str(self.json_file), "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        fields_row = list(
+            wb["fields"].iter_rows(min_row=2, max_row=2, values_only=True)
+        )[0]
+        sql_in_excel = fields_row[5]
+        self.assertNotIn('"', sql_in_excel)
+        self.assertIn("DEFAULT ''", sql_in_excel)
+        self.assertIn("COMMENT '名称'", sql_in_excel)
+        self.assertIn("COMMENT '测试表'", sql_in_excel)
+
+
 if __name__ == "__main__":
     unittest.main()
