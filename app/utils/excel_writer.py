@@ -48,7 +48,7 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
         table_name,
         data.product_line,
         data.day_or_hour,
-        None,
+        data.table_comment,
         data.dw_layer,
         data.table_format,
         data.target_table_format,

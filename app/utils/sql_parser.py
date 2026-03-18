@@ -17,6 +17,7 @@ OPERATE_TYPE_VALUES = frozenset(("新建表", "修改表"))
 _ALL_KEYS = (
     "mysql_sql", "day_or_hour", "product_line",
     "dw_layer", "table_format", "target_table_format", "operate_type",
+    "table_comment",
 )
 
 
@@ -65,6 +66,18 @@ def _validate_optional_field(value: str | None, allowed: frozenset[str], field_n
     return False
 
 
+def parse_table_comment(sql: str) -> str | None:
+    """从 MySQL DDL 的表级属性中提取 COMMENT，仅匹配 ')' 之后的部分以避免误取列注释。"""
+    paren_pos = sql.rfind(")")
+    if paren_pos == -1:
+        return None
+    suffix = sql[paren_pos + 1:]
+    match = re.search(r"COMMENT\s*=?\s*['\"](.+?)['\"]", suffix, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
 def parse_table_name(sql: str) -> str | None:
     """从 MySQL DDL 中提取表名，失败时返回 None。"""
     match = re.search(r"CREATE\s+TABLE\s+`?(\w+)`?", sql, re.IGNORECASE)
@@ -94,6 +107,7 @@ def parse_input_json(json_str: str) -> InputData | None:
     table_format = data.get("table_format") or None
     target_table_format = data.get("target_table_format") or None
     operate_type = data.get("operate_type") or None
+    table_comment = data.get("table_comment") or None
 
     if not _validate_optional_field(dw_layer, DW_LAYER_VALUES, "dw_layer"):
         return None
@@ -104,6 +118,9 @@ def parse_input_json(json_str: str) -> InputData | None:
     if not _validate_optional_field(operate_type, OPERATE_TYPE_VALUES, "operate_type"):
         return None
 
+    if not table_comment:
+        table_comment = parse_table_comment(data["mysql_sql"])
+
     return InputData(
         mysql_sql=data["mysql_sql"],
         day_or_hour=data["day_or_hour"],
@@ -112,4 +129,5 @@ def parse_input_json(json_str: str) -> InputData | None:
         table_format=table_format,
         target_table_format=target_table_format,
         operate_type=operate_type,
+        table_comment=table_comment,
     )

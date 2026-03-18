@@ -5,7 +5,7 @@
 ## 功能说明
 
 - 接收包含 `mysql_sql`、`day_or_hour`、`product_line` 三个必需字段的 JSON 输入
-- 支持 4 个可选字段：`dw_layer`、`table_format`、`target_table_format`、`operate_type`
+- 支持 5 个可选字段：`dw_layer`、`table_format`、`target_table_format`、`operate_type`、`table_comment`
 - 从 `mysql_sql` 中解析 MySQL 表名
 - 将解析结果写入 Excel 的 `tables` 和 `fields` 两个 Sheet
 - Excel 输出到按日期归档的目录（`create-table-output/YYYYMMDD/create_table_info.xlsx`）
@@ -20,6 +20,7 @@
 | tables | 表名       | 从 `mysql_sql` 解析          | -                         |
 | tables | 产品线     | `product_line`              | -                         |
 | tables | 入仓方式   | `day_or_hour`               | -                         |
+| tables | 表注释信息 | `table_comment`（可选，回退从 SQL COMMENT 解析） | -       |
 | tables | 数仓分层   | `dw_layer`（可选）           | ods, mds, sds             |
 | tables | 建表格式   | `table_format`（可选）       | orc, rcfile, txt          |
 | tables | 目标表类型 | `target_table_format`（可选）| hive, clickhouse          |
@@ -130,11 +131,12 @@ uv run add-sql-to-excel --file ../create-table-output/20260318/input.json
   "dw_layer": "ods",
   "table_format": "orc",
   "target_table_format": "hive",
-  "operate_type": "新建表"
+  "operate_type": "新建表",
+  "table_comment": "AI媒体任务表"
 }
 ```
 
-可选字段均可省略；若提供则必须在允许值范围内，否则记录 WARNING 并跳过。
+可选字段均可省略；枚举类可选字段若提供则必须在允许值范围内，否则记录 WARNING 并跳过。`table_comment` 为自由文本，若未提供则自动从 `mysql_sql` 的表级 `COMMENT` 中解析；若两者同时存在，以 JSON 字段值为准。
 
 ### 指定 Excel 输出路径
 
@@ -161,10 +163,12 @@ uv run python -m unittest discover -v tests
 测试覆盖场景：
 
 - SQL 表名解析（正常 / 无反引号 / 大小写不敏感 / 解析失败 / 空字符串）
+- SQL 表注释解析（单引号 / 双引号 / 有无等号 / 大小写不敏感 / 多行 SQL / 无表注释 / 无闭合括号 / 不误取列注释）
 - JSON 解析（有效输入 / 缺少各必需字段 / JSON 格式错误 / 字段值为空 / 可选字段枚举校验）
+- table_comment（JSON 字段优先 / 回退 SQL 解析 / 空字符串回退 / SQL 无注释时为 None）
 - SQL 双引号自动修复（`DEFAULT ""` / `COMMENT "xxx"` / 多列多处双引号 / 含可选字段 / 已正确转义不改动 / 多行 SQL / 修复后表名解析 / 无法修复返回 None）
-- Excel 写入（新建文件 / 正确列头 / 覆盖写入 / SQL 原文保留 / 解析失败跳过 / 可选字段写入 / 操作类型两页一致性 / 自动创建父目录）
-- 主流程（`--json` 参数 / `--file` 参数 / 输入解析失败退出 / JSON 文件不存在退出 / `--file` 含双引号 SQL 端到端写入）
+- Excel 写入（新建文件 / 正确列头 / 覆盖写入 / SQL 原文保留 / 解析失败跳过 / 可选字段写入 / 操作类型两页一致性 / 自动创建父目录 / table_comment 写入与置空）
+- 主流程（`--json` 参数 / `--file` 参数 / 输入解析失败退出 / JSON 文件不存在退出 / `--file` 含双引号 SQL 端到端写入 / table_comment 端到端）
 
 ## 项目结构
 
@@ -184,7 +188,7 @@ add-sql-to-excel-project/
 │   └── utils/
 │       ├── __init__.py
 │       ├── logger.py             # 统一日志（控制台 + 文件双输出）
-│       ├── sql_parser.py         # SQL 表名解析 & JSON 输入解析
+│       ├── sql_parser.py         # SQL 表名/表注释解析 & JSON 输入解析
 │       └── excel_writer.py       # Excel 覆盖写入逻辑
 ├── logs/                         # 日志输出目录
 └── tests/

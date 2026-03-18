@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from app.utils.sql_parser import parse_input_json, parse_table_name
+from app.utils.sql_parser import parse_input_json, parse_table_comment, parse_table_name
 
 SAMPLE_SQL = (
     "CREATE TABLE `ai_media_task` (\n"
@@ -36,6 +36,51 @@ class TestParseTableName(unittest.TestCase):
 
     def test_empty_string_returns_none(self):
         self.assertIsNone(parse_table_name(""))
+
+
+class TestParseTableComment(unittest.TestCase):
+    def test_single_quote_with_equals(self):
+        sql = "CREATE TABLE `t` (`id` int) ENGINE=InnoDB COMMENT='表注释'"
+        self.assertEqual(parse_table_comment(sql), "表注释")
+
+    def test_single_quote_without_equals(self):
+        sql = "CREATE TABLE `t` (`id` int) ENGINE=InnoDB COMMENT '表注释'"
+        self.assertEqual(parse_table_comment(sql), "表注释")
+
+    def test_double_quote_with_equals(self):
+        sql = 'CREATE TABLE `t` (`id` int) ENGINE=InnoDB COMMENT="表注释"'
+        self.assertEqual(parse_table_comment(sql), "表注释")
+
+    def test_double_quote_without_equals(self):
+        sql = 'CREATE TABLE `t` (`id` int) ENGINE=InnoDB COMMENT "表注释"'
+        self.assertEqual(parse_table_comment(sql), "表注释")
+
+    def test_equals_with_spaces(self):
+        sql = "CREATE TABLE `t` (`id` int) ENGINE=InnoDB COMMENT = '表注释'"
+        self.assertEqual(parse_table_comment(sql), "表注释")
+
+    def test_no_table_comment(self):
+        sql = "CREATE TABLE `t` (`id` int COMMENT '列注释') ENGINE=InnoDB"
+        self.assertIsNone(parse_table_comment(sql))
+
+    def test_no_closing_paren(self):
+        sql = "CREATE TABLE `t` COMMENT='xxx'"
+        self.assertIsNone(parse_table_comment(sql))
+
+    def test_multiline_sql(self):
+        self.assertEqual(parse_table_comment(SAMPLE_SQL), "AI媒体任务表")
+
+    def test_case_insensitive(self):
+        sql = "CREATE TABLE `t` (`id` int) ENGINE=InnoDB comment='小写注释'"
+        self.assertEqual(parse_table_comment(sql), "小写注释")
+
+    def test_column_comment_not_captured(self):
+        sql = (
+            "CREATE TABLE `t` (\n"
+            "  `name` varchar(64) COMMENT '用户名'\n"
+            ") ENGINE=InnoDB"
+        )
+        self.assertIsNone(parse_table_comment(sql))
 
 
 class TestParseInputJson(unittest.TestCase):
@@ -185,6 +230,53 @@ class TestParseInputJson(unittest.TestCase):
             result = parse_input_json(json.dumps(data))
             self.assertIsNotNone(result, f"operate_type={val} should be valid")
             self.assertEqual(result.operate_type, val)
+
+    def test_table_comment_from_json(self):
+        data = {
+            "mysql_sql": SAMPLE_SQL,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "table_comment": "自定义注释",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertIsNotNone(result)
+        self.assertEqual(result.table_comment, "自定义注释")
+
+    def test_table_comment_fallback_from_sql(self):
+        result = parse_input_json(SAMPLE_JSON)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.table_comment, "AI媒体任务表")
+
+    def test_table_comment_json_takes_priority_over_sql(self):
+        data = {
+            "mysql_sql": SAMPLE_SQL,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "table_comment": "JSON优先注释",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertEqual(result.table_comment, "JSON优先注释")
+
+    def test_table_comment_empty_string_falls_back_to_sql(self):
+        data = {
+            "mysql_sql": SAMPLE_SQL,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+            "table_comment": "",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertEqual(result.table_comment, "AI媒体任务表")
+
+    def test_table_comment_none_when_sql_has_no_comment(self):
+        sql_no_comment = "CREATE TABLE `t` (`id` int) ENGINE=InnoDB"
+        data = {
+            "mysql_sql": sql_no_comment,
+            "day_or_hour": "天表",
+            "product_line": "sfst",
+        }
+        result = parse_input_json(json.dumps(data))
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.table_comment)
 
 
 class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):

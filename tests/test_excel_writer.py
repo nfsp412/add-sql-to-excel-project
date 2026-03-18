@@ -169,6 +169,30 @@ class TestWriteRow(unittest.TestCase):
         write_row(nested_path, SAMPLE_DATA)
         self.assertTrue(nested_path.exists())
 
+    def test_table_comment_written_to_tables_sheet(self):
+        data = InputData(
+            mysql_sql=SAMPLE_SQL,
+            day_or_hour="天表",
+            product_line="sfst",
+            table_comment="AI媒体任务表",
+        )
+        write_row(self.excel_path, data)
+        wb = load_workbook(self.excel_path)
+        tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(tables_row[3], "AI媒体任务表")
+
+    def test_table_comment_none_leaves_cell_empty(self):
+        data = InputData(
+            mysql_sql=SAMPLE_SQL,
+            day_or_hour="天表",
+            product_line="sfst",
+            table_comment=None,
+        )
+        write_row(self.excel_path, data)
+        wb = load_workbook(self.excel_path)
+        tables_row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertIsNone(tables_row[3])
+
 
 if __name__ == "__main__":
     unittest.main()

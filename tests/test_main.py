@@ -169,6 +169,57 @@ class TestMainDateDirectory(unittest.TestCase):
         self.assertEqual(wb["tables"].max_row, 2)
 
 
+class TestMainTableComment(unittest.TestCase):
+    """table_comment 功能的端到端集成测试。"""
+
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.excel_path = self.tmp_dir / "output.xlsx"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_table_comment_from_json_field(self):
+        data = {**SAMPLE_JSON_DICT, "table_comment": "自定义表注释"}
+        with patch(
+            "sys.argv",
+            ["prog", "--json", json.dumps(data, ensure_ascii=False),
+             "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[3], "自定义表注释")
+
+    def test_table_comment_fallback_from_sql(self):
+        with patch(
+            "sys.argv",
+            ["prog", "--json", SAMPLE_JSON_STR, "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[3], "AI媒体任务表")
+
+    def test_table_comment_json_overrides_sql(self):
+        data = {**SAMPLE_JSON_DICT, "table_comment": "覆盖SQL注释"}
+        with patch(
+            "sys.argv",
+            ["prog", "--json", json.dumps(data, ensure_ascii=False),
+             "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(row[3], "覆盖SQL注释")
+
+
 class TestMainFileWithDoubleQuotes(unittest.TestCase):
     """通过 --file 传入含未转义双引号 SQL 的 JSON 文件，验证端到端正常。"""
 
