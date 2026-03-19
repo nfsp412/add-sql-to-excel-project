@@ -9,9 +9,13 @@
 - 从 `mysql_sql` 中解析 MySQL 表名
 - 将解析结果写入 Excel 的 `tables` 和 `fields` 两个 Sheet
 - Excel 输出到按日期归档的目录（`create-table-output/YYYYMMDD/create_table_info.xlsx`）
-- 采用**覆盖写入**模式，重跑脚本不会产生重复数据
+- 每次运行会**覆盖整个 Excel 文件**（非追加），重跑不会产生重复数据
 - 缺少必需字段或 SQL 解析失败时，记录日志并跳过，不终止程序
 - SQL 中包含未转义的双引号时（如 `DEFAULT ""` 或 `COMMENT "xxx"`），自动将双引号替换为单引号后继续解析（MySQL 中两者等价）
+
+### 与 create-table-project 的衔接
+
+本工具生成的 Excel 是 [create-table-project](../create-table-project) 的输入。典型流程为：先运行 `add-sql-to-excel` 将 MySQL 建表语句写入 Excel，再运行 `create-table` 根据 Excel 生成 Hive/ClickHouse 建表 SQL。
 
 ### 字段映射
 
@@ -19,14 +23,14 @@
 |--------|------------|-----------------------------|---------------------------|
 | tables | 表名       | 从 `mysql_sql` 解析          | -                         |
 | tables | 产品线     | `product_line`              | -                         |
-| tables | 入仓方式   | `day_or_hour`               | -                         |
+| tables | 入仓方式   | `day_or_hour`               | 天表, 小时表              |
 | tables | 表注释信息 | `table_comment`（可选，回退从 SQL COMMENT 解析） | -       |
 | tables | 数仓分层   | `dw_layer`（可选）           | ods, mds, sds             |
-| tables | 建表格式   | `table_format`（可选）       | orc, rcfile, txt          |
+| tables | 建表格式   | `table_format`（可选）       | orc, rcfile, text         |
 | tables | 目标表类型 | `target_table_format`（可选）| hive, clickhouse          |
 | tables | 操作类型   | `operate_type`（可选）       | 新建表, 修改表             |
+| tables | hive表名   | 本工具不填充，始终为空，供 create-table 使用 | - |
 | tables | 是否分库分表 | `is_sharding`（可选，回退按表名 `_数字` 结尾检测） | 是, 否 |
-| tables | 其他列     | 置空                         | -                         |
 | fields | 表名       | 从 `mysql_sql` 解析          | -                         |
 | fields | 操作类型   | `operate_type`（可选，与 tables 一致） | 新建表, 修改表 |
 | fields | 建表语句   | `mysql_sql` 原文（不做修改）  | -                         |
@@ -34,7 +38,7 @@
 
 ## 环境要求
 
-- Python 3.13+
+- Python 3.12+
 - [uv](https://github.com/astral-sh/uv) 包管理工具
 
 ## 安装
@@ -51,6 +55,8 @@ uv sync
 
 - 这会根据 `pyproject.toml` 和 `uv.lock` 创建/复用本地虚拟环境（默认在 `.venv/`），并安装所需依赖。
 - 如果尚未安装 `uv`，可参考官方安装文档（`https://docs.astral.sh/uv/`），或使用系统包管理器安装。
+
+## 使用方法
 
 ### 安装为命令行工具使用
 
@@ -77,26 +83,8 @@ uv run add-sql-to-excel --file ../create-table-output/20260318/input.json --debu
 
 > 若提示 `add-sql-to-excel: command not found`，请优先使用 `uv run add-sql-to-excel`；或者确认你已经在当前环境中安装了该项目（如使用传统 conda/venv，可在对应环境下执行 `pip install -e .`）。
 
-### 常用 uv 命令速查
 
-```bash
-# 安装依赖
-uv add <package>
 
-# 移除依赖
-uv remove <package>
-
-# 运行程序
-uv run <script.py>
-
-# 同步环境
-uv sync
-
-# 全局安装工具
-uv tool install <tool>
-```
-
-## 使用方法
 
 ### 通过命令行工具运行（推荐）
 
@@ -112,6 +100,12 @@ uv run add-sql-to-excel --json '{
 
 ```bash
 uv run python app/main.py --json '{...}'
+```
+
+### 通过 python 模块化运行
+
+```bash
+uv run python -m app.main --json '{...}'
 ```
 
 ### 通过 JSON 文件输入
@@ -155,7 +149,7 @@ uv run add-sql-to-excel --file ../create-table-output/20260318/input.json
 uv run add-sql-to-excel --file ../create-table-output/20260318/input.json --excel /path/to/output.xlsx
 ```
 
-> 默认输出路径为同级目录 `create-table-output/YYYYMMDD/create_table_info.xlsx`（按日期归档，覆盖写入）。
+> 默认输出路径为项目父目录下的 `create-table-output/YYYYMMDD/create_table_info.xlsx`（按日期归档，覆盖写入）。
 
 ### 开启调试日志
 
@@ -163,7 +157,7 @@ uv run add-sql-to-excel --file ../create-table-output/20260318/input.json --exce
 uv run add-sql-to-excel --file ../create-table-output/20260318/input.json --debug
 ```
 
-日志同时输出到控制台和 `logs/add_sql_to_excel.log` 文件。
+日志同时输出到控制台和 `create-table-output/YYYYMMDD/add_sql_to_excel.log` 文件。
 
 ## 运行测试
 
@@ -188,7 +182,6 @@ uv run python -m unittest discover -v tests
 ```
 add-sql-to-excel-project/
 ├── pyproject.toml                # 项目依赖配置 & CLI 入口注册
-├── .python-version               # Python 版本锁定
 ├── README.md                     # 使用文档
 ├── .gitignore
 ├── app/
@@ -203,11 +196,11 @@ add-sql-to-excel-project/
 │       ├── logger.py             # 统一日志（控制台 + 文件双输出）
 │       ├── sql_parser.py         # SQL 表名/表注释/分库分表解析 & JSON 输入解析
 │       └── excel_writer.py       # Excel 覆盖写入逻辑
-├── logs/                         # 日志输出目录
 └── tests/
     ├── __init__.py
     ├── test_sql_parser.py        # SQL 解析单元测试
     ├── test_excel_writer.py      # Excel 写入单元测试
+    ├── test_logger.py            # 日志配置单元测试
     └── test_main.py              # 主流程集成测试
 ```
 
@@ -216,9 +209,10 @@ add-sql-to-excel-project/
 | 场景                      | 行为                       |
 |---------------------------|----------------------------|
 | SQL 含未转义双引号        | 自动替换为单引号后继续解析，记录 INFO 日志 |
-| JSON 格式非法             | 尝试自动修复，失败则记录 WARNING 日志并跳过 |
-| JSON 缺少必需字段         | 记录 WARNING 日志，跳过     |
-| 可选字段值不在允许范围内  | 记录 WARNING 日志，跳过     |
-| SQL 中无法提取表名        | 记录 WARNING 日志，跳过     |
+| 顶层 JSON 解析失败且无法修复 | 记录 ERROR 日志并退出程序 |
+| 数组某项解析失败（缺字段、非法值等） | 记录 WARNING 日志并跳过该项 |
+| JSON 缺少必需字段         | 记录 WARNING 日志，跳过该项 |
+| 可选字段值不在允许范围内  | 记录 WARNING 日志，跳过该项；若所有项均失败则程序退出 |
+| SQL 中无法提取表名        | 记录 WARNING 日志，跳过该项 |
 | Excel 文件已存在          | 覆盖写入，保证数据不重复    |
 | 输出目录不存在            | 自动创建（含日期子目录）    |

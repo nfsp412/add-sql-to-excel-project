@@ -246,7 +246,7 @@ class TestParseInputJson(unittest.TestCase):
             self.assertEqual(result.dw_layer, val)
 
     def test_table_format_valid_values(self):
-        for val in ("orc", "rcfile", "txt"):
+        for val in ("orc", "rcfile", "text"):
             data = {
                 "mysql_sql": SAMPLE_SQL,
                 "day_or_hour": "天表",

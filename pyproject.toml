@@ -3,7 +3,7 @@ name = "add-sql-to-excel-project"
 version = "0.1.0"
 description = "将 JSON 中的 MySQL 建表语句解析后追加写入 Excel"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "openpyxl>=3.1.5",
 ]

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 _REQUIRED_FIELDS = ("mysql_sql", "day_or_hour", "product_line")
 
 DW_LAYER_VALUES = frozenset(("ods", "mds", "sds"))
-TABLE_FORMAT_VALUES = frozenset(("orc", "rcfile", "txt"))
+TABLE_FORMAT_VALUES = frozenset(("orc", "rcfile", "text"))
 TARGET_TABLE_FORMAT_VALUES = frozenset(("hive", "clickhouse"))
 OPERATE_TYPE_VALUES = frozenset(("新建表", "修改表"))
 IS_SHARDING_VALUES = frozenset(("是", "否"))
