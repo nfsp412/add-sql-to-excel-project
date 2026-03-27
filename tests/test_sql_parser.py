@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from app.models import ModifyTableInput
 from app.utils.sql_parser import detect_sharding, parse_input_dict, parse_input_json, parse_table_comment, parse_table_name, strip_sharding_suffix
 
 SAMPLE_SQL = (
@@ -10,13 +11,24 @@ SAMPLE_SQL = (
     ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI媒体任务表'"
 )
 
-SAMPLE_JSON = json.dumps(
-    {
-        "mysql_sql": SAMPLE_SQL,
+
+def full_create_payload(mysql_sql: str = SAMPLE_SQL, **kwargs: object) -> dict:
+    """新建表 JSON 八项必填（table_comment 可选）。"""
+    d = {
+        "mysql_sql": mysql_sql,
         "day_or_hour": "天表",
         "product_line": "sfst",
+        "dw_layer": "ods",
+        "table_format": "orc",
+        "target_table_format": "hive",
+        "operate_type": "新建表",
+        "is_sharding": "否",
     }
-)
+    d.update(kwargs)
+    return d
+
+
+SAMPLE_JSON = json.dumps(full_create_payload())
 
 
 class TestParseTableName(unittest.TestCase):
@@ -137,6 +149,8 @@ class TestParseInputJson(unittest.TestCase):
         result_json = parse_input_json(SAMPLE_JSON)
         result_dict = parse_input_dict(data)
         self.assertIsNotNone(result_dict)
+        self.assertIsNotNone(result_json)
+        assert result_json is not None and result_dict is not None
         self.assertEqual(result_dict.day_or_hour, result_json.day_or_hour)
         self.assertEqual(result_dict.product_line, result_json.product_line)
         self.assertEqual(result_dict.mysql_sql, result_json.mysql_sql)
@@ -161,237 +175,150 @@ class TestParseInputJson(unittest.TestCase):
         self.assertIsNone(parse_input_json(json.dumps(data)))
 
     def test_valid_optional_fields(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "dw_layer": "ods",
-            "table_format": "orc",
-            "target_table_format": "hive",
-            "operate_type": "新建表",
-        }
+        data = full_create_payload(
+            dw_layer="mds",
+            table_format="text",
+            target_table_format="clickhouse",
+            operate_type="修改表",
+        )
         result = parse_input_json(json.dumps(data))
         self.assertIsNotNone(result)
-        self.assertEqual(result.dw_layer, "ods")
-        self.assertEqual(result.table_format, "orc")
-        self.assertEqual(result.target_table_format, "hive")
-        self.assertEqual(result.operate_type, "新建表")
+        assert result is not None
+        self.assertEqual(result.dw_layer, "mds")
+        self.assertEqual(result.table_format, "text")
+        self.assertEqual(result.target_table_format, "clickhouse")
+        self.assertEqual(result.operate_type, "修改表")
 
     def test_dw_layer_invalid_value(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "dw_layer": "invalid",
-        }
+        data = full_create_payload(dw_layer="invalid")
         self.assertIsNone(parse_input_json(json.dumps(data)))
 
     def test_table_format_invalid_value(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "table_format": "parquet",
-        }
+        data = full_create_payload(table_format="parquet")
         self.assertIsNone(parse_input_json(json.dumps(data)))
 
     def test_target_table_format_invalid_value(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "target_table_format": "mysql",
-        }
+        data = full_create_payload(target_table_format="mysql")
         self.assertIsNone(parse_input_json(json.dumps(data)))
 
     def test_operate_type_invalid_value(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "operate_type": "删除表",
-        }
+        data = full_create_payload(operate_type="删除表")
         self.assertIsNone(parse_input_json(json.dumps(data)))
 
     def test_optional_fields_empty_or_missing(self):
         result = parse_input_json(SAMPLE_JSON)
         self.assertIsNotNone(result)
-        self.assertIsNone(result.dw_layer)
-        self.assertIsNone(result.table_format)
-        self.assertIsNone(result.target_table_format)
-        self.assertIsNone(result.operate_type)
+        assert result is not None
+        self.assertEqual(result.dw_layer, "ods")
+        self.assertEqual(result.table_format, "orc")
 
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "dw_layer": "",
-            "table_format": "",
-        }
-        result2 = parse_input_json(json.dumps(data))
-        self.assertIsNotNone(result2)
-        self.assertIsNone(result2.dw_layer)
-        self.assertIsNone(result2.table_format)
+        data = full_create_payload(dw_layer="", table_format="")
+        self.assertIsNone(parse_input_json(json.dumps(data)))
 
     def test_dw_layer_valid_values(self):
         for val in ("ods", "mds", "sds"):
-            data = {
-                "mysql_sql": SAMPLE_SQL,
-                "day_or_hour": "天表",
-                "product_line": "sfst",
-                "dw_layer": val,
-            }
+            data = full_create_payload(dw_layer=val)
             result = parse_input_json(json.dumps(data))
             self.assertIsNotNone(result, f"dw_layer={val} should be valid")
+            assert result is not None
             self.assertEqual(result.dw_layer, val)
 
     def test_table_format_valid_values(self):
         for val in ("orc", "rcfile", "text"):
-            data = {
-                "mysql_sql": SAMPLE_SQL,
-                "day_or_hour": "天表",
-                "product_line": "sfst",
-                "table_format": val,
-            }
+            data = full_create_payload(table_format=val)
             result = parse_input_json(json.dumps(data))
             self.assertIsNotNone(result, f"table_format={val} should be valid")
+            assert result is not None
             self.assertEqual(result.table_format, val)
 
     def test_target_table_format_valid_values(self):
         for val in ("hive", "clickhouse"):
-            data = {
-                "mysql_sql": SAMPLE_SQL,
-                "day_or_hour": "天表",
-                "product_line": "sfst",
-                "target_table_format": val,
-            }
+            data = full_create_payload(target_table_format=val)
             result = parse_input_json(json.dumps(data))
             self.assertIsNotNone(result, f"target_table_format={val} should be valid")
+            assert result is not None
             self.assertEqual(result.target_table_format, val)
 
     def test_operate_type_valid_values(self):
         for val in ("新建表", "修改表"):
-            data = {
-                "mysql_sql": SAMPLE_SQL,
-                "day_or_hour": "天表",
-                "product_line": "sfst",
-                "operate_type": val,
-            }
+            data = full_create_payload(operate_type=val)
             result = parse_input_json(json.dumps(data))
             self.assertIsNotNone(result, f"operate_type={val} should be valid")
+            assert result is not None
             self.assertEqual(result.operate_type, val)
 
     def test_table_comment_from_json(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "table_comment": "自定义注释",
-        }
+        data = full_create_payload(table_comment="自定义注释")
         result = parse_input_json(json.dumps(data))
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.table_comment, "自定义注释")
 
     def test_table_comment_fallback_from_sql(self):
         result = parse_input_json(SAMPLE_JSON)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result.table_comment, "AI媒体任务表")
 
     def test_table_comment_json_takes_priority_over_sql(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "table_comment": "JSON优先注释",
-        }
+        data = full_create_payload(table_comment="JSON优先注释")
         result = parse_input_json(json.dumps(data))
+        assert result is not None
         self.assertEqual(result.table_comment, "JSON优先注释")
 
     def test_table_comment_empty_string_falls_back_to_sql(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "table_comment": "",
-        }
+        data = full_create_payload(table_comment="")
         result = parse_input_json(json.dumps(data))
+        assert result is not None
         self.assertEqual(result.table_comment, "AI媒体任务表")
 
     def test_table_comment_none_when_sql_has_no_comment(self):
         sql_no_comment = "CREATE TABLE `t` (`id` int) ENGINE=InnoDB"
-        data = {
-            "mysql_sql": sql_no_comment,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-        }
+        data = full_create_payload(mysql_sql=sql_no_comment)
         result = parse_input_json(json.dumps(data))
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertIsNone(result.table_comment)
 
     def test_is_sharding_from_json_yes(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "is_sharding": "是",
-        }
+        data = full_create_payload(is_sharding="是")
         result = parse_input_json(json.dumps(data))
+        assert result is not None
         self.assertEqual(result.is_sharding, "是")
 
     def test_is_sharding_from_json_no(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "is_sharding": "否",
-        }
+        data = full_create_payload(is_sharding="否")
         result = parse_input_json(json.dumps(data))
+        assert result is not None
         self.assertEqual(result.is_sharding, "否")
 
     def test_is_sharding_json_no_overrides_sql_detection(self):
         sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
-        data = {
-            "mysql_sql": sharding_sql,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "is_sharding": "否",
-        }
+        data = full_create_payload(mysql_sql=sharding_sql, is_sharding="否")
         result = parse_input_json(json.dumps(data))
+        assert result is not None
         self.assertEqual(result.is_sharding, "否")
 
-    def test_is_sharding_auto_detect_yes(self):
+    def test_is_sharding_explicit_yes(self):
         sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
-        data = {
-            "mysql_sql": sharding_sql,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-        }
+        data = full_create_payload(mysql_sql=sharding_sql, is_sharding="是")
         result = parse_input_json(json.dumps(data))
+        assert result is not None
         self.assertEqual(result.is_sharding, "是")
 
-    def test_is_sharding_auto_detect_no(self):
+    def test_is_sharding_default_no_in_full_payload(self):
         result = parse_input_json(SAMPLE_JSON)
+        assert result is not None
         self.assertEqual(result.is_sharding, "否")
 
     def test_is_sharding_invalid_value(self):
-        data = {
-            "mysql_sql": SAMPLE_SQL,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "is_sharding": "maybe",
-        }
+        data = full_create_payload(is_sharding="maybe")
         self.assertIsNone(parse_input_json(json.dumps(data)))
 
-    def test_is_sharding_empty_string_falls_back_to_detection(self):
+    def test_is_sharding_empty_string_skipped(self):
         sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
-        data = {
-            "mysql_sql": sharding_sql,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "is_sharding": "",
-        }
-        result = parse_input_json(json.dumps(data))
-        self.assertEqual(result.is_sharding, "是")
+        data = full_create_payload(mysql_sql=sharding_sql, is_sharding="")
+        self.assertIsNone(parse_input_json(json.dumps(data)))
 
 
 class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
@@ -401,7 +328,9 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
         raw = (
             '{"mysql_sql": "CREATE TABLE `t` (`name` varchar(64) DEFAULT ""'
             " COMMENT '名称') ENGINE=InnoDB\""
-            ', "day_or_hour": "天表", "product_line": "sfst"}'
+            ', "day_or_hour": "天表", "product_line": "sfst", '
+            '"dw_layer": "ods", "table_format": "orc", '
+            '"target_table_format": "hive", "operate_type": "新建表", "is_sharding": "否"}'
         )
         result = parse_input_json(raw)
         self.assertIsNotNone(result)
@@ -412,7 +341,9 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
         raw = (
             '{"mysql_sql": "CREATE TABLE `t` ('
             '`a` varchar(64) DEFAULT "" COMMENT "名称"'
-            ') ENGINE=InnoDB", "day_or_hour": "天表", "product_line": "sfst"}'
+            ') ENGINE=InnoDB", "day_or_hour": "天表", "product_line": "sfst", '
+            '"dw_layer": "ods", "table_format": "orc", '
+            '"target_table_format": "hive", "operate_type": "新建表", "is_sharding": "否"}'
         )
         result = parse_input_json(raw)
         self.assertIsNotNone(result)
@@ -424,7 +355,9 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
             '{"mysql_sql": "CREATE TABLE `t` ('
             '`a` varchar DEFAULT "" COMMENT "字段A", '
             '`b` varchar DEFAULT "hello" COMMENT "字段B"'
-            ') ENGINE=InnoDB", "day_or_hour": "天表", "product_line": "sfst"}'
+            ') ENGINE=InnoDB", "day_or_hour": "天表", "product_line": "sfst", '
+            '"dw_layer": "ods", "table_format": "orc", '
+            '"target_table_format": "hive", "operate_type": "新建表", "is_sharding": "否"}'
         )
         result = parse_input_json(raw)
         self.assertIsNotNone(result)
@@ -435,7 +368,7 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
 
     def test_properly_escaped_quotes_use_normal_path(self):
         sql = 'CREATE TABLE `t` (`a` varchar DEFAULT "" COMMENT "名称") ENGINE=InnoDB'
-        data = {"mysql_sql": sql, "day_or_hour": "天表", "product_line": "sfst"}
+        data = full_create_payload(mysql_sql=sql)
         result = parse_input_json(json.dumps(data))
         self.assertIsNotNone(result)
         self.assertIn('DEFAULT ""', result.mysql_sql)
@@ -445,7 +378,8 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
         raw = (
             '{"mysql_sql": "CREATE TABLE `t` (`a` int) COMMENT "表注释"", '
             '"day_or_hour": "天表", "product_line": "sfst", '
-            '"dw_layer": "ods", "operate_type": "新建表"}'
+            '"dw_layer": "ods", "table_format": "orc", '
+            '"target_table_format": "hive", "operate_type": "新建表", "is_sharding": "否"}'
         )
         result = parse_input_json(raw)
         self.assertIsNotNone(result)
@@ -459,7 +393,9 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
             '  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT "主键",\n'
             '  `name` varchar(64) DEFAULT "" COMMENT "用户名"\n'
             ') ENGINE=InnoDB COMMENT "用户表"", '
-            '"day_or_hour": "天表", "product_line": "sfst"}'
+            '"day_or_hour": "天表", "product_line": "sfst", '
+            '"dw_layer": "ods", "table_format": "orc", '
+            '"target_table_format": "hive", "operate_type": "新建表", "is_sharding": "否"}'
         )
         result = parse_input_json(raw)
         self.assertIsNotNone(result)
@@ -479,7 +415,9 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
             '{"mysql_sql": "CREATE TABLE `order_detail` ('
             '`id` int COMMENT "主键"'
             ') ENGINE=InnoDB COMMENT "订单明细"", '
-            '"day_or_hour": "天表", "product_line": "sfst"}'
+            '"day_or_hour": "天表", "product_line": "sfst", '
+            '"dw_layer": "ods", "table_format": "orc", '
+            '"target_table_format": "hive", "operate_type": "新建表", "is_sharding": "否"}'
         )
         result = parse_input_json(raw)
         self.assertIsNotNone(result)
@@ -489,6 +427,46 @@ class TestParseInputJsonDoubleQuoteRepair(unittest.TestCase):
     def test_irreparable_json_returns_none(self):
         self.assertIsNone(parse_input_json("{totally broken"))
         self.assertIsNone(parse_input_json("not json at all"))
+
+
+class TestParseModifyTable(unittest.TestCase):
+    def test_modify_table_ok(self):
+        data = {
+            "table_name": "ods_ad_sfst_t_day",
+            "operate_type": "修改表",
+            "target_table_format": "hive",
+            "new_fields": [
+                {"field_name": "col_a", "field_type": "bigint"},
+                {"field_name": "col_b", "field_type": "string"},
+            ],
+        }
+        r = parse_input_dict(data)
+        self.assertIsInstance(r, ModifyTableInput)
+        assert isinstance(r, ModifyTableInput)
+        self.assertEqual(r.table_name, "ods_ad_sfst_t_day")
+        self.assertEqual(r.target_table_format, "hive")
+        self.assertEqual(len(r.new_fields), 2)
+        self.assertEqual(r.new_fields[1].field_type, "string")
+
+    def test_modify_field_type_defaults_to_string(self):
+        data = {
+            "table_name": "t1",
+            "operate_type": "修改表",
+            "target_table_format": "clickhouse",
+            "new_fields": [{"field_name": "x"}],
+        }
+        r = parse_input_dict(data)
+        assert isinstance(r, ModifyTableInput)
+        self.assertEqual(r.new_fields[0].field_type, "string")
+
+    def test_modify_not_operate_alter_skipped(self):
+        data = {
+            "table_name": "t1",
+            "operate_type": "新建表",
+            "target_table_format": "hive",
+            "new_fields": [{"field_name": "x", "field_type": "int"}],
+        }
+        self.assertIsNone(parse_input_dict(data))
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from app.utils.excel_writer import FIELDS_HEADERS, TABLES_HEADERS, write_row, write_rows
-from app.models import InputData
+from app.models import InputData, ModifyTableInput, NewField
 
 SAMPLE_SQL = (
     "CREATE TABLE `ai_media_task` (\n"
@@ -257,6 +257,36 @@ class TestWriteRow(unittest.TestCase):
         row2 = list(tables_ws.iter_rows(min_row=3, max_row=3, values_only=True))[0]
         self.assertEqual(row1[0], "ai_media_task")
         self.assertEqual(row2[0], "other_table")
+
+    def test_write_rows_modify_table_multiple_field_rows(self):
+        mod = ModifyTableInput(
+            table_name="ods_ad_sfst_x_day",
+            target_table_format="hive",
+            operate_type="修改表",
+            new_fields=[
+                NewField("c1", "bigint"),
+                NewField("c2", "string"),
+            ],
+        )
+        write_rows(self.excel_path, [mod])
+
+        wb = load_workbook(self.excel_path)
+        self.assertEqual(wb["tables"].max_row, 2)
+        self.assertEqual(wb["fields"].max_row, 3)
+
+        trow = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        self.assertEqual(trow[0], "ods_ad_sfst_x_day")
+        self.assertEqual(trow[6], "hive")
+        self.assertEqual(trow[7], "修改表")
+        self.assertEqual(trow[8], "ods_ad_sfst_x_day")
+
+        f1 = list(wb["fields"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+        f2 = list(wb["fields"].iter_rows(min_row=3, max_row=3, values_only=True))[0]
+        self.assertEqual(f1[0], "ods_ad_sfst_x_day")
+        self.assertEqual(f1[1], "c1")
+        self.assertEqual(f1[2], "bigint")
+        self.assertEqual(f1[4], "修改表")
+        self.assertEqual(f2[1], "c2")
 
 
 if __name__ == "__main__":

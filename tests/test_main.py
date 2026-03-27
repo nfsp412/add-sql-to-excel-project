@@ -13,11 +13,22 @@ SAMPLE_SQL = (
     ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI媒体任务表'"
 )
 
-SAMPLE_JSON_DICT = {
-    "mysql_sql": SAMPLE_SQL,
-    "day_or_hour": "天表",
-    "product_line": "sfst",
-}
+def full_create_dict(**kwargs):
+    base = {
+        "mysql_sql": SAMPLE_SQL,
+        "day_or_hour": "天表",
+        "product_line": "sfst",
+        "dw_layer": "ods",
+        "table_format": "orc",
+        "target_table_format": "hive",
+        "operate_type": "新建表",
+        "is_sharding": "否",
+    }
+    base.update(kwargs)
+    return base
+
+
+SAMPLE_JSON_DICT = full_create_dict()
 
 SAMPLE_JSON_STR = json.dumps(SAMPLE_JSON_DICT, ensure_ascii=False)
 
@@ -50,13 +61,11 @@ class TestMainWithJson(unittest.TestCase):
         self.assertEqual(row[2], "天表")
 
     def test_json_arg_with_optional_fields(self):
-        data = {
-            **SAMPLE_JSON_DICT,
-            "dw_layer": "ods",
-            "table_format": "orc",
-            "target_table_format": "hive",
-            "operate_type": "新建表",
-        }
+        data = full_create_dict(
+            dw_layer="mds",
+            table_format="text",
+            operate_type="新建表",
+        )
         with patch(
             "sys.argv",
             ["prog", "--json", json.dumps(data, ensure_ascii=False),
@@ -67,7 +76,8 @@ class TestMainWithJson(unittest.TestCase):
 
         wb = load_workbook(self.excel_path)
         row = list(wb["tables"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
-        self.assertEqual(row[4], "ods")
+        self.assertEqual(row[4], "mds")
+        self.assertEqual(row[5], "text")
         self.assertEqual(row[7], "新建表")
 
 
@@ -124,11 +134,11 @@ class TestMainWithArrayJson(unittest.TestCase):
         array_json = json.dumps(
             [
                 SAMPLE_JSON_DICT,
-                {
-                    "mysql_sql": "CREATE TABLE `other_table` (id int);",
-                    "day_or_hour": "小时表",
-                    "product_line": "wax",
-                },
+                full_create_dict(
+                    mysql_sql="CREATE TABLE `other_table` (id int);",
+                    day_or_hour="小时表",
+                    product_line="wax",
+                ),
             ],
             ensure_ascii=False,
         )
@@ -149,6 +159,48 @@ class TestMainWithArrayJson(unittest.TestCase):
         row2 = list(tables_ws.iter_rows(min_row=3, max_row=3, values_only=True))[0]
         self.assertEqual(row1[0], "ai_media_task")
         self.assertEqual(row2[0], "other_table")
+
+    def test_array_json_mixed_create_and_modify(self):
+        """数组中混排新建表与修改表：tables 两行、fields 一行 DDL + 两行字段行。"""
+        array_json = json.dumps(
+            [
+                SAMPLE_JSON_DICT,
+                {
+                    "table_name": "ods_ad_wax_mod_table_day",
+                    "operate_type": "修改表",
+                    "target_table_format": "hive",
+                    "new_fields": [
+                        {"field_name": "add_col_1", "field_type": "bigint"},
+                        {"field_name": "add_col_2", "field_type": "string"},
+                    ],
+                },
+            ],
+            ensure_ascii=False,
+        )
+        self.json_file.write_text(array_json, encoding="utf-8")
+
+        with patch(
+            "sys.argv",
+            ["prog", "--file", str(self.json_file), "--excel", str(self.excel_path)],
+        ):
+            from app.main import main
+            main()
+
+        wb = load_workbook(self.excel_path)
+        self.assertEqual(wb["tables"].max_row, 3)
+        self.assertEqual(wb["fields"].max_row, 4)
+
+        t2 = list(wb["tables"].iter_rows(min_row=3, max_row=3, values_only=True))[0]
+        self.assertEqual(t2[0], "ods_ad_wax_mod_table_day")
+        self.assertEqual(t2[6], "hive")
+        self.assertEqual(t2[7], "修改表")
+        self.assertEqual(t2[8], "ods_ad_wax_mod_table_day")
+
+        f3 = list(wb["fields"].iter_rows(min_row=3, max_row=3, values_only=True))[0]
+        f4 = list(wb["fields"].iter_rows(min_row=4, max_row=4, values_only=True))[0]
+        self.assertEqual(f3[1], "add_col_1")
+        self.assertEqual(f3[2], "bigint")
+        self.assertEqual(f4[1], "add_col_2")
 
 
 class TestMainParseFailure(unittest.TestCase):
@@ -222,7 +274,7 @@ class TestMainTableComment(unittest.TestCase):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_table_comment_from_json_field(self):
-        data = {**SAMPLE_JSON_DICT, "table_comment": "自定义表注释"}
+        data = full_create_dict(table_comment="自定义表注释")
         with patch(
             "sys.argv",
             ["prog", "--json", json.dumps(data, ensure_ascii=False),
@@ -248,7 +300,7 @@ class TestMainTableComment(unittest.TestCase):
         self.assertEqual(row[3], "AI媒体任务表")
 
     def test_table_comment_json_overrides_sql(self):
-        data = {**SAMPLE_JSON_DICT, "table_comment": "覆盖SQL注释"}
+        data = full_create_dict(table_comment="覆盖SQL注释")
         with patch(
             "sys.argv",
             ["prog", "--json", json.dumps(data, ensure_ascii=False),
@@ -272,9 +324,9 @@ class TestMainIsSharding(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
-    def test_is_sharding_auto_detect_yes(self):
+    def test_is_sharding_explicit_yes_strips_suffix(self):
         sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
-        data = {"mysql_sql": sharding_sql, "day_or_hour": "天表", "product_line": "sfst"}
+        data = full_create_dict(mysql_sql=sharding_sql, is_sharding="是")
         with patch(
             "sys.argv",
             ["prog", "--json", json.dumps(data, ensure_ascii=False),
@@ -288,14 +340,9 @@ class TestMainIsSharding(unittest.TestCase):
         self.assertEqual(row[0], "order")
         self.assertEqual(row[9], "是")
 
-    def test_is_sharding_json_no_overrides_detection(self):
+    def test_is_sharding_json_no_overrides_suffix_strip(self):
         sharding_sql = "CREATE TABLE `order_0` (`id` int) ENGINE=InnoDB"
-        data = {
-            "mysql_sql": sharding_sql,
-            "day_or_hour": "天表",
-            "product_line": "sfst",
-            "is_sharding": "否",
-        }
+        data = full_create_dict(mysql_sql=sharding_sql, is_sharding="否")
         with patch(
             "sys.argv",
             ["prog", "--json", json.dumps(data, ensure_ascii=False),
@@ -333,7 +380,9 @@ class TestMainFileWithDoubleQuotes(unittest.TestCase):
             '{"mysql_sql": "CREATE TABLE `t` ('
             '`a` varchar(64) DEFAULT "" COMMENT "名称"'
             ') ENGINE=InnoDB COMMENT "测试表"", '
-            '"day_or_hour": "天表", "product_line": "sfst"}'
+            '"day_or_hour": "天表", "product_line": "sfst", '
+            '"dw_layer": "ods", "table_format": "orc", '
+            '"target_table_format": "hive", "operate_type": "新建表", "is_sharding": "否"}'
         )
         self.json_file.write_text(broken_json, encoding="utf-8")
 

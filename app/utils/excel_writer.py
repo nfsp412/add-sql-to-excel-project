@@ -1,10 +1,11 @@
 import logging
 from pathlib import Path
+from typing import Union
 
 from openpyxl import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 
-from app.models import InputData
+from app.models import InputData, ModifyTableInput
 from app.utils.sql_parser import parse_table_name, strip_sharding_suffix
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,36 @@ def _row_from_data(data: InputData) -> tuple[list, list] | None:
     return (tables_row, fields_row)
 
 
+def _rows_from_modify(data: ModifyTableInput) -> tuple[list, list[list]]:
+    """修改表：一行 tables，多行 fields（每新增字段一行）。"""
+    name = data.table_name.strip()
+    tables_row = [
+        name,
+        None,
+        None,
+        None,
+        None,
+        None,
+        data.target_table_format,
+        data.operate_type,
+        name,
+        None,
+    ]
+    fields_rows = []
+    for nf in data.new_fields:
+        fields_rows.append(
+            [
+                name,
+                nf.field_name,
+                nf.field_type,
+                None,
+                data.operate_type,
+                None,
+            ]
+        )
+    return tables_row, fields_rows
+
+
 def write_row(excel_path: str | Path, data: InputData) -> None:
     """将 InputData 数据写入 Excel 的 tables 和 fields 两个 Sheet（覆盖模式）。"""
     rows = _row_from_data(data)
@@ -83,8 +114,8 @@ def write_row(excel_path: str | Path, data: InputData) -> None:
     logger.info("已写入表 '%s' 到 %s", rows[0][0], p)
 
 
-def write_rows(excel_path: str | Path, data_list: list[InputData]) -> None:
-    """将多条 InputData 批量写入 Excel 的 tables 和 fields 两个 Sheet。"""
+def write_rows(excel_path: str | Path, data_list: list[Union[InputData, ModifyTableInput]]) -> None:
+    """将多条 InputData 或 ModifyTableInput 批量写入 Excel 的 tables 和 fields 两个 Sheet。"""
     if not data_list:
         logger.warning("data_list 为空，不写入文件")
         return
@@ -97,10 +128,17 @@ def write_rows(excel_path: str | Path, data_list: list[InputData]) -> None:
     fields_ws: Worksheet = wb["fields"]
 
     for data in data_list:
-        rows = _row_from_data(data)
-        if rows:
-            tables_ws.append(rows[0])
-            fields_ws.append(rows[1])
-            logger.info("已写入表 '%s' 到 %s", rows[0][0], p)
+        if isinstance(data, ModifyTableInput):
+            t_row, f_rows = _rows_from_modify(data)
+            tables_ws.append(t_row)
+            for fr in f_rows:
+                fields_ws.append(fr)
+            logger.info("已写入修改表 '%s'（%d 个新字段）到 %s", t_row[0], len(f_rows), p)
+        else:
+            rows = _row_from_data(data)
+            if rows:
+                tables_ws.append(rows[0])
+                fields_ws.append(rows[1])
+                logger.info("已写入表 '%s' 到 %s", rows[0][0], p)
 
     wb.save(p)
